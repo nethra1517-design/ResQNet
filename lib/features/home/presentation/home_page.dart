@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-
+import '../../../core/widgets/logout_button.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/resqnet_logo.dart';
 
@@ -37,6 +37,7 @@ class HomePage extends StatelessWidget {
             letterSpacing: -0.5,
           ),
         ),
+        
 
         centerTitle: true,
 
@@ -68,6 +69,9 @@ class HomePage extends StatelessWidget {
           ),
 
           const SizedBox(width: 5),
+          const LogoutButton(),
+
+          const SizedBox(width: 5)
         ],
       ),
 
