@@ -12,7 +12,9 @@ class RegisterPage extends StatefulWidget {
 }
 
 class _RegisterPageState extends State<RegisterPage> {
+  final _nameController = TextEditingController();
   final _emailController = TextEditingController();
+  final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
 
@@ -24,18 +26,26 @@ class _RegisterPageState extends State<RegisterPage> {
 
   @override
   void dispose() {
+    _nameController.dispose();
     _emailController.dispose();
+    _phoneController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
   }
 
   Future<void> _register() async {
+    final name = _nameController.text.trim();
     final email = _emailController.text.trim();
+    final phone = _phoneController.text.trim();
     final password = _passwordController.text;
     final confirmPassword = _confirmPasswordController.text;
 
-    if (email.isEmpty || password.isEmpty || confirmPassword.isEmpty) {
+    if (name.isEmpty ||
+        email.isEmpty ||
+        phone.isEmpty ||
+        password.isEmpty ||
+        confirmPassword.isEmpty) {
       _showMessage('Please fill in all fields.');
       return;
     }
@@ -50,13 +60,20 @@ class _RegisterPageState extends State<RegisterPage> {
       return;
     }
 
+    if (phone.length < 10) {
+      _showMessage('Please enter a valid phone number.');
+      return;
+    }
+
     setState(() => _isLoading = true);
 
     try {
       await _authService.registerWithEmail(
-        email: email,
-        password: password,
-      );
+       name: name,
+       email: email,
+       phone: phone,
+       password: password,
+     );
 
       if (!mounted) return;
 
@@ -163,6 +180,25 @@ class _RegisterPageState extends State<RegisterPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // FULL NAME
+                    _buildLabel('Full Name'),
+
+                    const SizedBox(height: 8),
+
+                    TextField(
+                      controller: _nameController,
+                      textCapitalization: TextCapitalization.words,
+                      decoration: _inputDecoration(
+                        hint: 'Enter your full name',
+                        icon: Icons.person_outline,
+                        teal: teal,
+                        background: background,
+                      ),
+                    ),
+
+                    const SizedBox(height: 18),
+
+                    // EMAIL
                     _buildLabel('Email'),
 
                     const SizedBox(height: 8),
@@ -180,6 +216,25 @@ class _RegisterPageState extends State<RegisterPage> {
 
                     const SizedBox(height: 18),
 
+                    // PHONE NUMBER
+                    _buildLabel('Phone Number'),
+
+                    const SizedBox(height: 8),
+
+                    TextField(
+                      controller: _phoneController,
+                      keyboardType: TextInputType.phone,
+                      decoration: _inputDecoration(
+                        hint: 'Enter your phone number',
+                        icon: Icons.phone_outlined,
+                        teal: teal,
+                        background: background,
+                      ),
+                    ),
+
+                    const SizedBox(height: 18),
+
+                    // PASSWORD
                     _buildLabel('Password'),
 
                     const SizedBox(height: 8),
@@ -209,6 +264,7 @@ class _RegisterPageState extends State<RegisterPage> {
 
                     const SizedBox(height: 18),
 
+                    // CONFIRM PASSWORD
                     _buildLabel('Confirm Password'),
 
                     const SizedBox(height: 8),
@@ -239,6 +295,7 @@ class _RegisterPageState extends State<RegisterPage> {
 
                     const SizedBox(height: 24),
 
+                    // CREATE ACCOUNT BUTTON
                     SizedBox(
                       width: double.infinity,
                       height: 54,
@@ -276,6 +333,7 @@ class _RegisterPageState extends State<RegisterPage> {
 
               const SizedBox(height: 20),
 
+              // SIGN IN LINK
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -304,15 +362,15 @@ class _RegisterPageState extends State<RegisterPage> {
     );
   }
 
- Widget _buildLabel(String text) {
-  return Text(
-    text,
-    style: const TextStyle(
-      fontWeight: FontWeight.w700,
-      color: Color(0xFF102A43),
-    ),
-  );
-}
+  Widget _buildLabel(String text) {
+    return Text(
+      text,
+      style: const TextStyle(
+        fontWeight: FontWeight.w700,
+        color: Color(0xFF102A43),
+      ),
+    );
+  }
 
   InputDecoration _inputDecoration({
     required String hint,

@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import '../../../core/widgets/logout_button.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/resqnet_logo.dart';
+import '../../citizen/presentation/citizen_profile_page.dart';
+import '../../emergency/presentation/emergency_sos_page.dart';
+import '../../requests/presentation/citizens_request_page.dart';
 
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
@@ -37,7 +40,6 @@ class HomePage extends StatelessWidget {
             letterSpacing: -0.5,
           ),
         ),
-        
 
         centerTitle: true,
 
@@ -68,10 +70,32 @@ class HomePage extends StatelessWidget {
             ],
           ),
 
-          const SizedBox(width: 5),
+          const SizedBox(width: 2),
+
+          // MY PROFILE
+          IconButton(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) =>
+                      const CitizenProfilePage(),
+                ),
+              );
+            },
+            icon: const Icon(
+              Icons.person_outline_rounded,
+              color: AppTheme.navy,
+              size: 27,
+            ),
+            tooltip: 'My Profile',
+          ),
+
+          const SizedBox(width: 2),
+
           const LogoutButton(),
 
-          const SizedBox(width: 5)
+          const SizedBox(width: 5),
         ],
       ),
 
@@ -81,7 +105,12 @@ class HomePage extends StatelessWidget {
       body: SafeArea(
         child: SingleChildScrollView(
           physics: const BouncingScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(18, 18, 18, 30),
+          padding: const EdgeInsets.fromLTRB(
+            18,
+            18,
+            18,
+            30,
+          ),
 
           child: Column(
             children: [
@@ -129,7 +158,8 @@ class HomePage extends StatelessWidget {
                     end: Alignment.bottomRight,
                   ),
 
-                  borderRadius: BorderRadius.circular(25),
+                  borderRadius:
+                      BorderRadius.circular(25),
 
                   boxShadow: [
                     BoxShadow(
@@ -151,7 +181,8 @@ class HomePage extends StatelessWidget {
                       height: 62,
 
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.18),
+                        color: Colors.white
+                            .withValues(alpha: 0.18),
                         shape: BoxShape.circle,
                       ),
 
@@ -180,11 +211,11 @@ class HomePage extends StatelessWidget {
                     Text(
                       'Send an SOS with your location\n'
                       'and emergency details.',
-
                       textAlign: TextAlign.center,
 
                       style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.92),
+                        color: Colors.white
+                            .withValues(alpha: 0.92),
                         fontSize: 14,
                         height: 1.45,
                         fontWeight: FontWeight.w500,
@@ -199,15 +230,28 @@ class HomePage extends StatelessWidget {
                       height: 58,
 
                       child: ElevatedButton.icon(
-                        onPressed: () {},
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) =>
+                                  const EmergencySosPage(),
+                            ),
+                          );
+                        },
 
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          foregroundColor: const Color(0xFFE53935),
+                        style:
+                            ElevatedButton.styleFrom(
+                          backgroundColor:
+                              Colors.white,
+                          foregroundColor:
+                              const Color(0xFFE53935),
                           elevation: 0,
 
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(18),
+                          shape:
+                              RoundedRectangleBorder(
+                            borderRadius:
+                                BorderRadius.circular(18),
                           ),
                         ),
 
@@ -220,7 +264,8 @@ class HomePage extends StatelessWidget {
                           'SEND EMERGENCY SOS',
                           style: TextStyle(
                             fontSize: 15,
-                            fontWeight: FontWeight.w900,
+                            fontWeight:
+                                FontWeight.w900,
                             letterSpacing: 0.2,
                           ),
                         ),
@@ -236,8 +281,10 @@ class HomePage extends StatelessWidget {
               // QUICK ACTIONS HEADER
               // ======================================================
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                crossAxisAlignment: CrossAxisAlignment.center,
+                mainAxisAlignment:
+                    MainAxisAlignment.spaceBetween,
+                crossAxisAlignment:
+                    CrossAxisAlignment.center,
 
                 children: [
                   const Text(
@@ -278,11 +325,14 @@ class HomePage extends StatelessWidget {
 
                   Expanded(
                     child: _ActionCard(
-                      icon: Icons.medical_services_rounded,
+                      icon:
+                          Icons.medical_services_rounded,
                       title: 'Medical',
                       subtitle: 'Request help',
-                      iconColor: const Color(0xFFEF4444),
-                      backgroundColor: const Color(0xFFFFEEEE),
+                      iconColor:
+                          const Color(0xFFEF4444),
+                      backgroundColor:
+                          const Color(0xFFFFEEEE),
                     ),
                   ),
 
@@ -290,11 +340,14 @@ class HomePage extends StatelessWidget {
 
                   Expanded(
                     child: _ActionCard(
-                      icon: Icons.restaurant_rounded,
+                      icon:
+                          Icons.restaurant_rounded,
                       title: 'Food',
                       subtitle: 'Request food',
-                      iconColor: const Color(0xFFF2A900),
-                      backgroundColor: const Color(0xFFFFF6DE),
+                      iconColor:
+                          const Color(0xFFF2A900),
+                      backgroundColor:
+                          const Color(0xFFFFF6DE),
                     ),
                   ),
                 ],
@@ -310,11 +363,14 @@ class HomePage extends StatelessWidget {
 
                   Expanded(
                     child: _ActionCard(
-                      icon: Icons.directions_car_rounded,
+                      icon:
+                          Icons.directions_car_rounded,
                       title: 'Rescue',
                       subtitle: 'Request rescue',
-                      iconColor: const Color(0xFF2196F3),
-                      backgroundColor: const Color(0xFFE9F6FF),
+                      iconColor:
+                          const Color(0xFF2196F3),
+                      backgroundColor:
+                          const Color(0xFFE9F6FF),
                     ),
                   ),
 
@@ -325,11 +381,121 @@ class HomePage extends StatelessWidget {
                       icon: Icons.warning_rounded,
                       title: 'Report',
                       subtitle: 'Report hazard',
-                      iconColor: const Color(0xFF7027A0),
-                      backgroundColor: const Color(0xFFF3E9FA),
+                      iconColor:
+                          const Color(0xFF7027A0),
+                      backgroundColor:
+                          const Color(0xFFF3E9FA),
                     ),
                   ),
                 ],
+              ),
+
+              const SizedBox(height: 18),
+
+              // ======================================================
+              // MY REQUESTS
+              // ======================================================
+              InkWell(
+                borderRadius:
+                    BorderRadius.circular(21),
+
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) =>
+                          const CitizenRequestsPage(),
+                    ),
+                  );
+                },
+
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius:
+                        BorderRadius.circular(21),
+
+                    border: Border.all(
+                      color:
+                          const Color(0xFFE3E8ED),
+                    ),
+
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black
+                            .withValues(alpha: 0.035),
+                        blurRadius: 12,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+
+                  child: Row(
+                    children: [
+
+                      // Request icon
+                      Container(
+                        width: 52,
+                        height: 52,
+
+                        decoration: BoxDecoration(
+                          color: AppTheme.teal
+                              .withValues(alpha: 0.11),
+                          shape: BoxShape.circle,
+                        ),
+
+                        child: const Icon(
+                          Icons.receipt_long_rounded,
+                          color: AppTheme.teal,
+                          size: 28,
+                        ),
+                      ),
+
+                      const SizedBox(width: 13),
+
+                      // Text
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment:
+                              CrossAxisAlignment.start,
+
+                          children: [
+                            Text(
+                              'My Requests',
+                              style: TextStyle(
+                                color: AppTheme.navy,
+                                fontSize: 15,
+                                fontWeight:
+                                    FontWeight.w900,
+                              ),
+                            ),
+
+                            SizedBox(height: 4),
+
+                            Text(
+                              'View your submitted requests and current status.',
+                              style: TextStyle(
+                                color:
+                                    Color(0xFF7B8794),
+                                fontSize: 12,
+                                height: 1.3,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      const Icon(
+                        Icons.chevron_right_rounded,
+                        color: Color(0xFF9AA5B1),
+                        size: 24,
+                      ),
+                    ],
+                  ),
+                ),
               ),
 
               const SizedBox(height: 18),
@@ -343,15 +509,18 @@ class HomePage extends StatelessWidget {
 
                 decoration: BoxDecoration(
                   color: Colors.white,
-                  borderRadius: BorderRadius.circular(21),
+                  borderRadius:
+                      BorderRadius.circular(21),
 
                   border: Border.all(
-                    color: const Color(0xFFE3E8ED),
+                    color:
+                        const Color(0xFFE3E8ED),
                   ),
 
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.035),
+                      color: Colors.black
+                          .withValues(alpha: 0.035),
                       blurRadius: 12,
                       offset: const Offset(0, 4),
                     ),
@@ -367,7 +536,8 @@ class HomePage extends StatelessWidget {
                       height: 52,
 
                       decoration: BoxDecoration(
-                        color: AppTheme.teal.withValues(alpha: 0.11),
+                        color: AppTheme.teal
+                            .withValues(alpha: 0.11),
                         shape: BoxShape.circle,
                       ),
 
@@ -383,7 +553,8 @@ class HomePage extends StatelessWidget {
                     // Text
                     const Expanded(
                       child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                        crossAxisAlignment:
+                            CrossAxisAlignment.start,
 
                         children: [
                           Text(
@@ -391,7 +562,8 @@ class HomePage extends StatelessWidget {
                             style: TextStyle(
                               color: AppTheme.navy,
                               fontSize: 15,
-                              fontWeight: FontWeight.w900,
+                              fontWeight:
+                                  FontWeight.w900,
                             ),
                           ),
 
@@ -400,7 +572,8 @@ class HomePage extends StatelessWidget {
                           Text(
                             'Used during emergencies for faster response.',
                             style: TextStyle(
-                              color: Color(0xFF7B8794),
+                              color:
+                                  Color(0xFF7B8794),
                               fontSize: 12,
                               height: 1.3,
                             ),
@@ -411,22 +584,27 @@ class HomePage extends StatelessWidget {
 
                     // Active
                     Container(
-                      padding: const EdgeInsets.symmetric(
+                      padding:
+                          const EdgeInsets.symmetric(
                         horizontal: 11,
                         vertical: 7,
                       ),
 
                       decoration: BoxDecoration(
-                        color: const Color(0xFFE4F8E9),
-                        borderRadius: BorderRadius.circular(20),
+                        color:
+                            const Color(0xFFE4F8E9),
+                        borderRadius:
+                            BorderRadius.circular(20),
                       ),
 
                       child: const Text(
                         'Active',
                         style: TextStyle(
-                          color: Color(0xFF16833B),
+                          color:
+                              Color(0xFF16833B),
                           fontSize: 12,
-                          fontWeight: FontWeight.w900,
+                          fontWeight:
+                              FontWeight.w900,
                         ),
                       ),
                     ),
@@ -476,7 +654,8 @@ class _ActionCard extends StatelessWidget {
 
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius:
+            BorderRadius.circular(20),
 
         border: Border.all(
           color: const Color(0xFFE1E7EC),
@@ -484,7 +663,8 @@ class _ActionCard extends StatelessWidget {
 
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.025),
+            color: Colors.black
+                .withValues(alpha: 0.025),
             blurRadius: 8,
             offset: const Offset(0, 3),
           ),
@@ -492,7 +672,8 @@ class _ActionCard extends StatelessWidget {
       ),
 
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment:
+            CrossAxisAlignment.start,
 
         children: [
 
@@ -503,7 +684,8 @@ class _ActionCard extends StatelessWidget {
 
             decoration: BoxDecoration(
               color: backgroundColor,
-              borderRadius: BorderRadius.circular(14),
+              borderRadius:
+                  BorderRadius.circular(14),
             ),
 
             child: Icon(
