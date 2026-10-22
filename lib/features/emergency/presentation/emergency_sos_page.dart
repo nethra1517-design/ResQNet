@@ -1,11 +1,13 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../../../core/services/offline_sync_service.dart';
 
 import '../services/priority_prediction_service.dart';
 
@@ -28,11 +30,12 @@ class _EmergencySosPageState
   final _auth =
       FirebaseAuth.instance;
 
-  final _storage =
-      FirebaseStorage.instance;
-
   final ImagePicker _imagePicker =
       ImagePicker();
+
+  // ============================================================
+  // BASIC SOS DETAILS
+  // ============================================================
 
   String _emergencyType =
       'Select emergency type';
@@ -308,8 +311,10 @@ class _EmergencySosPageState
         await showModalBottomSheet<ImageSource>(
       context: context,
       backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(
+      shape:
+          const RoundedRectangleBorder(
+        borderRadius:
+            BorderRadius.vertical(
           top: Radius.circular(22),
         ),
       ),
@@ -341,7 +346,9 @@ class _EmergencySosPageState
                   ),
                 ),
 
-                const SizedBox(height: 18),
+                const SizedBox(
+                  height: 18,
+                ),
 
                 const Text(
                   'Add Emergency Photo',
@@ -350,11 +357,13 @@ class _EmergencySosPageState
                         Color(0xFF102A43),
                     fontSize: 18,
                     fontWeight:
-                        FontWeight.w800,
+                        FontWeight.w900,
                   ),
                 ),
 
-                const SizedBox(height: 16),
+                const SizedBox(
+                  height: 18,
+                ),
 
                 ListTile(
                   leading: Container(
@@ -362,30 +371,28 @@ class _EmergencySosPageState
                     height: 44,
                     decoration:
                         BoxDecoration(
-                      color: const Color(
-                        0xFFE0F2F1,
-                      ),
+                      color:
+                          const Color(0xFFE0F2F1),
                       borderRadius:
                           BorderRadius.circular(
                         12,
                       ),
                     ),
                     child: const Icon(
-                      Icons
-                          .camera_alt_rounded,
+                      Icons.camera_alt_rounded,
                       color:
                           Color(0xFF087F8C),
                     ),
                   ),
                   title: const Text(
-                    'Take Photo',
+                    'Take a photo',
                     style: TextStyle(
                       fontWeight:
-                          FontWeight.w700,
+                          FontWeight.w800,
                     ),
                   ),
                   subtitle: const Text(
-                    'Use the camera',
+                    'Use the device camera',
                   ),
                   onTap: () {
                     Navigator.pop(
@@ -395,7 +402,9 @@ class _EmergencySosPageState
                   },
                 ),
 
-                const SizedBox(height: 5),
+                const SizedBox(
+                  height: 6,
+                ),
 
                 ListTile(
                   leading: Container(
@@ -403,26 +412,24 @@ class _EmergencySosPageState
                     height: 44,
                     decoration:
                         BoxDecoration(
-                      color: const Color(
-                        0xFFEFF6FF,
-                      ),
+                      color:
+                          const Color(0xFFE0F2F1),
                       borderRadius:
                           BorderRadius.circular(
                         12,
                       ),
                     ),
                     child: const Icon(
-                      Icons
-                          .photo_library_rounded,
+                      Icons.photo_library_rounded,
                       color:
-                          Color(0xFF2563EB),
+                          Color(0xFF087F8C),
                     ),
                   ),
                   title: const Text(
-                    'Choose from Gallery',
+                    'Choose from gallery',
                     style: TextStyle(
                       fontWeight:
-                          FontWeight.w700,
+                          FontWeight.w800,
                     ),
                   ),
                   subtitle: const Text(
@@ -464,9 +471,12 @@ class _EmergencySosPageState
       final photo =
           await _imagePicker.pickImage(
         source: source,
-        imageQuality: 80,
-        maxWidth: 1600,
-        maxHeight: 1600,
+
+        // Smaller image for zero-cost
+        // Firestore storage.
+        imageQuality: 40,
+        maxWidth: 600,
+        maxHeight: 600,
       );
 
       if (photo == null) {
@@ -477,6 +487,17 @@ class _EmergencySosPageState
           await photo.readAsBytes();
 
       if (!mounted) return;
+
+      // Firestore document limit is 1 MiB.
+      // Base64 increases the size, so keep
+      // a safety limit on the original bytes.
+      if (bytes.length > 500000) {
+        _showMessage(
+          'Photo is too large. Please select another photo.',
+        );
+
+        return;
+      }
 
       setState(() {
         _selectedPhoto = photo;
@@ -517,84 +538,21 @@ class _EmergencySosPageState
   }
 
   // ============================================================
-  // UPLOAD PHOTO TO FIREBASE STORAGE
+  // CONVERT PHOTO TO BASE64
   // ============================================================
 
-  Future<String?> _uploadPhoto(
-    String sosId,
-  ) async {
-    if (_selectedPhoto == null ||
-        _photoBytes == null) {
+  String? _getPhotoBase64() {
+    if (_photoBytes == null) {
       return null;
     }
 
-    try {
-      final user = _auth.currentUser;
-
-      if (user == null) {
-        return null;
-      }
-
-      final extension =
-          _selectedPhoto!.name
-              .split('.')
-              .last
-              .toLowerCase();
-
-      final fileName =
-          'evidence_${DateTime.now().millisecondsSinceEpoch}.$extension';
-
-      final storagePath =
-          'emergency_sos/${user.uid}/$sosId/$fileName';
-
-      final storageReference =
-          _storage.ref().child(
-                storagePath,
-              );
-
-      final metadata =
-          SettableMetadata(
-        contentType:
-            _getContentType(extension),
-      );
-
-      await storageReference.putData(
-        _photoBytes!,
-        metadata,
-      );
-
-      final downloadUrl =
-          await storageReference
-              .getDownloadURL();
-
-      return downloadUrl;
-    } catch (_) {
+    if (_photoBytes!.length > 500000) {
       return null;
     }
-  }
 
-  // ============================================================
-  // CONTENT TYPE
-  // ============================================================
-
-  String _getContentType(
-    String extension,
-  ) {
-    switch (extension) {
-      case 'png':
-        return 'image/png';
-
-      case 'webp':
-        return 'image/webp';
-
-      case 'heic':
-        return 'image/heic';
-
-      case 'jpg':
-      case 'jpeg':
-      default:
-        return 'image/jpeg';
-    }
+    return base64Encode(
+      _photoBytes!,
+    );
   }
 
   // ============================================================
@@ -682,10 +640,12 @@ class _EmergencySosPageState
 
       return {
         'type': 'family_member',
-        'name': member['name'],
+        'name':
+            member['name'],
         'relationship':
             member['relationship'],
-        'age': member['age'],
+        'age':
+            member['age'],
         'healthCondition':
             member['healthCondition'],
         'pregnancyStatus':
@@ -819,7 +779,8 @@ class _EmergencySosPageState
 
     if (_affectedPersonType ==
         'Myself') {
-      priorityAge = _citizenAge;
+      priorityAge =
+          _citizenAge;
 
       priorityHealth =
           _citizenHealthCondition;
@@ -853,7 +814,8 @@ class _EmergencySosPageState
           _severity,
       affectedPersonType:
           _affectedPersonType,
-      age: priorityAge,
+      age:
+          priorityAge,
       healthCondition:
           priorityHealth,
       pregnancyStatus:
@@ -861,6 +823,25 @@ class _EmergencySosPageState
       familyMembers:
           _familyMembers,
     );
+
+    // ==========================================================
+    // PREPARE OPTIONAL PHOTO
+    // ==========================================================
+
+    String? photoBase64;
+
+    if (_selectedPhoto != null) {
+      photoBase64 =
+          _getPhotoBase64();
+
+      if (photoBase64 == null) {
+        _showMessage(
+          'Photo is too large. Please choose another photo.',
+        );
+
+        return;
+      }
+    }
 
     setState(() {
       _isSending = true;
@@ -871,17 +852,25 @@ class _EmergencySosPageState
           _getAssignedDepartment();
 
       // ========================================================
-      // CREATE SOS DOCUMENT FIRST
+      // CREATE SOS DOCUMENT
       // ========================================================
 
-      final sosReference =
-          await _firestore
-              .collection('emergency_sos')
-              .add({
-        'citizenId': user.uid,
+      final synced = await OfflineSyncService.instance.saveAndSync(
+        collectionName: 'emergency_sos',
+        data: {
+        // ------------------------------------------------------
+        // CITIZEN
+        // ------------------------------------------------------
+
+        'citizenId':
+            user.uid,
 
         'citizenEmail':
             user.email ?? '',
+
+        // ------------------------------------------------------
+        // EMERGENCY DETAILS
+        // ------------------------------------------------------
 
         'emergencyType':
             _emergencyType,
@@ -891,11 +880,19 @@ class _EmergencySosPageState
                 .text
                 .trim(),
 
+        // ------------------------------------------------------
+        // LOCATION
+        // ------------------------------------------------------
+
         'latitude':
             _latitude,
 
         'longitude':
             _longitude,
+
+        // ------------------------------------------------------
+        // SEVERITY
+        // ------------------------------------------------------
 
         'severity':
             _severity,
@@ -911,7 +908,7 @@ class _EmergencySosPageState
             affectedPerson,
 
         // ------------------------------------------------------
-        // PRIORITY
+        // PRIORITY PREDICTION
         // ------------------------------------------------------
 
         'priority': {
@@ -924,13 +921,14 @@ class _EmergencySosPageState
         },
 
         // ------------------------------------------------------
-        // PHOTO
+        // OPTIONAL PHOTO
         // ------------------------------------------------------
-
-        'photoUrl': null,
 
         'photoAttached':
             _selectedPhoto != null,
+
+        'photoBase64':
+            photoBase64,
 
         // ------------------------------------------------------
         // STATUS
@@ -938,6 +936,10 @@ class _EmergencySosPageState
 
         'status':
             'received',
+
+        // ------------------------------------------------------
+        // RESPONSE DEPARTMENT
+        // ------------------------------------------------------
 
         'assignedDepartment':
             assignedDepartment,
@@ -950,48 +952,18 @@ class _EmergencySosPageState
         // ------------------------------------------------------
 
         'createdAt':
-            FieldValue
-                .serverTimestamp(),
+            DateTime.now().toIso8601String(),
 
         'updatedAt':
-            FieldValue
-                .serverTimestamp(),
+            DateTime.now().toIso8601String(),
       });
-
-      // ========================================================
-      // UPLOAD OPTIONAL PHOTO
-      // ========================================================
-
-      if (_selectedPhoto != null &&
-          _photoBytes != null) {
-        final photoUrl =
-            await _uploadPhoto(
-          sosReference.id,
-        );
-
-        if (photoUrl == null) {
-          // Remove the SOS document if the
-          // citizen selected a photo but the
-          // evidence upload failed.
-          await sosReference.delete();
-
-          throw Exception(
-            'PHOTO_UPLOAD_FAILED',
-          );
-        }
-
-        await sosReference.update({
-          'photoUrl': photoUrl,
-          'updatedAt':
-              FieldValue
-                  .serverTimestamp(),
-        });
-      }
 
       if (!mounted) return;
 
       _showMessage(
-        'Emergency SOS sent successfully.',
+        synced
+            ? 'Emergency SOS sent successfully.'
+            : 'Saved — Waiting for Network. It will sync automatically.',
       );
 
       await Future.delayed(
@@ -1009,27 +981,19 @@ class _EmergencySosPageState
       if (e.code ==
           'permission-denied') {
         _showMessage(
-          'Permission denied. Please check Firebase rules.',
+          'Permission denied. Please check Firestore rules.',
         );
       } else {
         _showMessage(
           'Unable to send SOS. Please try again.',
         );
       }
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
 
-      if (e.toString().contains(
-            'PHOTO_UPLOAD_FAILED',
-          )) {
-        _showMessage(
-          'SOS was not submitted because the photo could not be uploaded.',
-        );
-      } else {
-        _showMessage(
-          'Unable to send SOS. Please try again.',
-        );
-      }
+      _showMessage(
+        'Unable to send SOS. Please try again.',
+      );
     } finally {
       if (mounted) {
         setState(() {
@@ -1037,6 +1001,133 @@ class _EmergencySosPageState
         });
       }
     }
+  }
+
+  Future<void> _showSmsFallback() async {
+    if (_latitude == null || _longitude == null) {
+      await _getCurrentLocation();
+    }
+
+    if (!mounted) return;
+
+    final phoneController = TextEditingController();
+    final user = _auth.currentUser;
+    final mapLink = _latitude != null && _longitude != null
+        ? 'https://www.google.com/maps/search/?api=1&query=$_latitude,$_longitude'
+        : 'Location unavailable. Open ResQNet and capture your location.';
+    final message = [
+      'RESQNET EMERGENCY SOS',
+      'Citizen: ${user?.email ?? 'Unknown'}',
+      'Emergency: $_emergencyType',
+      'Severity: $_severity',
+      'Details: ${_descriptionController.text.trim().isEmpty ? 'Not provided' : _descriptionController.text.trim()}',
+      'Latitude: ${_latitude?.toStringAsFixed(6) ?? 'Unavailable'}',
+      'Longitude: ${_longitude?.toStringAsFixed(6) ?? 'Unavailable'}',
+      'Map pin: $mapLink',
+      'Time: ${DateTime.now().toLocal().toString()}',
+    ].join('\n');
+
+    final action = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('SMS Emergency Fallback'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Enter your own mobile number for testing.'),
+              const SizedBox(height: 12),
+              TextField(
+                controller: phoneController,
+                keyboardType: TextInputType.phone,
+                decoration: const InputDecoration(
+                  labelText: 'Recipient mobile number',
+                  hintText: 'Include country code if needed',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'The message includes a Google Maps pin link when location is captured.',
+                style: TextStyle(fontSize: 12),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('CANCEL'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, 'simulate'),
+            child: const Text('SIMULATE SMS'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final phone = phoneController.text.trim();
+              if (phone.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Enter a recipient mobile number.'),
+                  ),
+                );
+                return;
+              }
+              Navigator.pop(dialogContext, phone);
+            },
+            child: const Text('OPEN SMS APP'),
+          ),
+        ],
+      ),
+    );
+
+    if (!mounted) {
+      phoneController.dispose();
+      return;
+    }
+
+    if (action == 'simulate') {
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('SMS Simulated'),
+          content: SingleChildScrollView(
+            child: SelectableText(
+              'Recipient: ${phoneController.text.trim()}\n\n$message',
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('CLOSE'),
+            ),
+          ],
+        ),
+      );
+    } else if (action != null) {
+      final uri = Uri(
+        scheme: 'sms',
+        path: action,
+        queryParameters: {'body': message},
+      );
+      try {
+        final launched = await launchUrl(
+          uri,
+          mode: LaunchMode.externalApplication,
+        );
+        if (!launched && mounted) {
+          _showMessage('Unable to open the SMS app on this device.');
+        }
+      } catch (_) {
+        if (mounted) {
+          _showMessage('Unable to open the SMS app on this device.');
+        }
+      }
+    }
+
+    phoneController.dispose();
   }
 
   // ============================================================
@@ -1049,7 +1140,8 @@ class _EmergencySosPageState
     ScaffoldMessenger.of(context)
         .showSnackBar(
       SnackBar(
-        content: Text(message),
+        content:
+            Text(message),
         behavior:
             SnackBarBehavior.floating,
       ),
@@ -1065,15 +1157,18 @@ class _EmergencySosPageState
     required IconData icon,
   }) {
     return InputDecoration(
-      hintText: hint,
+      hintText:
+          hint,
 
-      prefixIcon: Icon(
+      prefixIcon:
+          Icon(
         icon,
         color:
             const Color(0xFF087F8C),
       ),
 
-      filled: true,
+      filled:
+          true,
 
       fillColor:
           const Color(0xFFF5F7FA),
@@ -1081,7 +1176,9 @@ class _EmergencySosPageState
       border:
           OutlineInputBorder(
         borderRadius:
-            BorderRadius.circular(14),
+            BorderRadius.circular(
+          14,
+        ),
         borderSide:
             BorderSide.none,
       ),
@@ -1097,7 +1194,8 @@ class _EmergencySosPageState
   ) {
     return Text(
       text,
-      style: const TextStyle(
+      style:
+          const TextStyle(
         fontWeight:
             FontWeight.w700,
         color:
@@ -1119,36 +1217,50 @@ class _EmergencySosPageState
           'Photo Evidence (Optional)',
         ),
 
-        const SizedBox(height: 8),
+        const SizedBox(
+          height: 8,
+        ),
 
         if (_photoBytes == null)
           InkWell(
             borderRadius:
-                BorderRadius.circular(14),
+                BorderRadius.circular(
+              14,
+            ),
             onTap:
                 _isPickingPhoto
                     ? null
                     : _choosePhotoSource,
             child: Container(
-              width: double.infinity,
+              width:
+                  double.infinity,
+
               padding:
-                  const EdgeInsets.symmetric(
+                  const EdgeInsets
+                      .symmetric(
                 horizontal: 16,
                 vertical: 17,
               ),
+
               decoration:
                   BoxDecoration(
                 color:
-                    const Color(0xFFF5F7FA),
+                    const Color(
+                  0xFFF5F7FA,
+                ),
                 borderRadius:
                     BorderRadius.circular(
                   14,
                 ),
-                border: Border.all(
+                border:
+                    Border.all(
                   color:
-                      const Color(0xFFDCE3E8),
+                      const Color(
+                    0xFFDCE3E8,
+                  ),
                 ),
               ),
+
               child: Row(
                 children: [
                   Container(
@@ -1157,31 +1269,39 @@ class _EmergencySosPageState
                     decoration:
                         BoxDecoration(
                       color:
-                          const Color(0xFFE0F2F1),
+                          const Color(
+                        0xFFE0F2F1,
+                      ),
                       borderRadius:
                           BorderRadius.circular(
                         12,
                       ),
                     ),
-                    child: _isPickingPhoto
-                        ? const Padding(
-                            padding:
-                                EdgeInsets.all(
-                              12,
-                            ),
-                            child:
-                                CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color:
-                                  Color(0xFF087F8C),
-                            ),
-                          )
-                        : const Icon(
-                            Icons
-                                .add_a_photo_rounded,
-                            color:
-                                Color(0xFF087F8C),
-                          ),
+                    child:
+                        _isPickingPhoto
+                            ? const Padding(
+                                padding:
+                                    EdgeInsets.all(
+                                  12,
+                                ),
+                                child:
+                                    CircularProgressIndicator(
+                                  strokeWidth:
+                                      2,
+                                  color:
+                                      Color(
+                                    0xFF087F8C,
+                                  ),
+                                ),
+                              )
+                            : const Icon(
+                                Icons
+                                    .add_a_photo_rounded,
+                                color:
+                                    Color(
+                                  0xFF087F8C,
+                                ),
+                              ),
                   ),
 
                   const SizedBox(
@@ -1189,30 +1309,42 @@ class _EmergencySosPageState
                   ),
 
                   const Expanded(
-                    child: Column(
+                    child:
+                        Column(
                       crossAxisAlignment:
                           CrossAxisAlignment
                               .start,
                       children: [
                         Text(
                           'Add Photo',
-                          style: TextStyle(
+                          style:
+                              TextStyle(
                             color:
-                                Color(0xFF102A43),
-                            fontSize: 14,
+                                Color(
+                              0xFF102A43,
+                            ),
+                            fontSize:
+                                14,
                             fontWeight:
-                                FontWeight.w800,
+                                FontWeight
+                                    .w800,
                           ),
                         ),
 
-                        SizedBox(height: 3),
+                        SizedBox(
+                          height: 3,
+                        ),
 
                         Text(
                           'Capture or select evidence of the emergency.',
-                          style: TextStyle(
+                          style:
+                              TextStyle(
                             color:
-                                Color(0xFF64748B),
-                            fontSize: 12,
+                                Color(
+                              0xFF64748B,
+                            ),
+                            fontSize:
+                                12,
                           ),
                         ),
                       ],
@@ -1223,7 +1355,9 @@ class _EmergencySosPageState
                     Icons
                         .chevron_right_rounded,
                     color:
-                        Color(0xFF94A3B8),
+                        Color(
+                      0xFF94A3B8,
+                    ),
                   ),
                 ],
               ),
@@ -1231,84 +1365,96 @@ class _EmergencySosPageState
           )
         else
           Container(
-            width: double.infinity,
+            width:
+                double.infinity,
+
             decoration:
                 BoxDecoration(
-              color: Colors.white,
+              color:
+                  Colors.white,
               borderRadius:
                   BorderRadius.circular(
                 14,
               ),
-              border: Border.all(
+              border:
+                  Border.all(
                 color:
-                    const Color(0xFFDCE3E8),
+                    const Color(
+                  0xFFDCE3E8,
+                ),
               ),
             ),
-            clipBehavior:
-                Clip.antiAlias,
-            child: Column(
+
+            child:
+                Column(
+              crossAxisAlignment:
+                  CrossAxisAlignment
+                      .start,
               children: [
-                Stack(
-                  children: [
-                    SizedBox(
-                      width:
-                          double.infinity,
-                      height: 210,
-                      child: Image.memory(
+                ClipRRect(
+                  borderRadius:
+                      const BorderRadius
+                          .vertical(
+                    top: Radius.circular(
+                      14,
+                    ),
+                  ),
+                  child:
+                      Stack(
+                    children: [
+                      Image.memory(
                         _photoBytes!,
+                        width:
+                            double.infinity,
+                        height:
+                            230,
                         fit:
                             BoxFit.cover,
                       ),
-                    ),
 
-                    Positioned(
-                      top: 10,
-                      right: 10,
-                      child: Material(
-                        color: Colors.black
-                            .withValues(
-                          alpha: 0.55,
-                        ),
-                        shape:
-                            const CircleBorder(),
-                        child: InkWell(
-                          customBorder:
+                      Positioned(
+                        top: 10,
+                        right: 10,
+                        child:
+                            Material(
+                          color:
+                              Colors.black54,
+                          shape:
                               const CircleBorder(),
-                          onTap:
-                              _removePhoto,
                           child:
-                              const Padding(
-                            padding:
-                                EdgeInsets.all(
-                              8,
-                            ),
-                            child: Icon(
-                              Icons.close_rounded,
+                              IconButton(
+                            onPressed:
+                                _removePhoto,
+                            icon:
+                                const Icon(
+                              Icons.close,
                               color:
                                   Colors.white,
-                              size: 20,
                             ),
                           ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
 
                 Padding(
                   padding:
                       const EdgeInsets
-                          .symmetric(
-                    horizontal: 14,
-                    vertical: 12,
+                          .fromLTRB(
+                    14,
+                    12,
+                    14,
+                    12,
                   ),
-                  child: Row(
+                  child:
+                      Row(
                     children: [
                       const Icon(
                         Icons
                             .check_circle_rounded,
                         color:
-                            Color(0xFF16A34A),
+                            Colors.green,
                         size: 20,
                       ),
 
@@ -1317,15 +1463,20 @@ class _EmergencySosPageState
                       ),
 
                       const Expanded(
-                        child: Text(
+                        child:
+                            Text(
                           'Photo attached',
                           style:
                               TextStyle(
                             color:
-                                Color(0xFF166534),
-                            fontSize: 13,
+                                Color(
+                              0xFF166534,
+                            ),
+                            fontSize:
+                                13,
                             fontWeight:
-                                FontWeight.w700,
+                                FontWeight
+                                    .w700,
                           ),
                         ),
                       ),
@@ -1339,7 +1490,8 @@ class _EmergencySosPageState
                           style:
                               TextStyle(
                             fontWeight:
-                                FontWeight.w800,
+                                FontWeight
+                                    .w800,
                           ),
                         ),
                       ),
@@ -1365,39 +1517,67 @@ class _EmergencySosPageState
 
     if (_familyMembers.isEmpty) {
       return Container(
-        width: double.infinity,
+        width:
+            double.infinity,
+
+        margin:
+            const EdgeInsets.only(
+          top: 18,
+        ),
+
         padding:
-            const EdgeInsets.all(15),
+            const EdgeInsets.all(
+          15,
+        ),
+
         decoration:
             BoxDecoration(
           color:
-              const Color(0xFFFFF7ED),
+              const Color(
+            0xFFFFF7ED,
+          ),
           borderRadius:
-              BorderRadius.circular(14),
-          border: Border.all(
+              BorderRadius.circular(
+            14,
+          ),
+          border:
+              Border.all(
             color:
-                const Color(0xFFFED7AA),
+                const Color(
+              0xFFFED7AA,
+            ),
           ),
         ),
-        child: const Row(
+
+        child:
+            const Row(
           children: [
             Icon(
               Icons
                   .info_outline_rounded,
               color:
-                  Color(0xFFEA580C),
+                  Color(
+                0xFFEA580C,
+              ),
             ),
 
-            SizedBox(width: 10),
+            SizedBox(
+              width: 10,
+            ),
 
             Expanded(
-              child: Text(
+              child:
+                  Text(
                 'No family members found. '
                 'Add family members from My Profile.',
-                style: TextStyle(
+                style:
+                    TextStyle(
                   color:
-                      Color(0xFF9A3412),
-                  fontSize: 13,
+                      Color(
+                    0xFF9A3412,
+                  ),
+                  fontSize:
+                      13,
                 ),
               ),
             ),
@@ -1418,7 +1598,9 @@ class _EmergencySosPageState
           'Select Family Member',
         ),
 
-        const SizedBox(height: 8),
+        const SizedBox(
+          height: 8,
+        ),
 
         DropdownButtonFormField<int>(
           initialValue:
@@ -1428,14 +1610,16 @@ class _EmergencySosPageState
               _inputDecoration(
             hint:
                 'Select affected family member',
-            icon: Icons
-                .person_search_outlined,
+            icon:
+                Icons
+                    .person_search_outlined,
           ),
 
-          items: _familyMembers
-              .asMap()
-              .entries
-              .map(
+          items:
+              _familyMembers
+                  .asMap()
+                  .entries
+                  .map(
             (entry) {
               final index =
                   entry.key;
@@ -1458,9 +1642,12 @@ class _EmergencySosPageState
                           ?.toString() ??
                       '';
 
-              return DropdownMenuItem<int>(
-                value: index,
-                child: Text(
+              return DropdownMenuItem<
+                  int>(
+                value:
+                    index,
+                child:
+                    Text(
                   '$name'
                   '${relationship.isNotEmpty ? ' ($relationship)' : ''}'
                   '${age.isNotEmpty ? ' - $age yrs' : ''}',
@@ -1469,7 +1656,8 @@ class _EmergencySosPageState
             },
           ).toList(),
 
-          onChanged: (value) {
+          onChanged:
+              (value) {
             setState(() {
               _selectedFamilyMemberIndex =
                   value;
@@ -1504,615 +1692,668 @@ class _EmergencySosPageState
       backgroundColor:
           background,
 
-      appBar: AppBar(
+      appBar:
+          AppBar(
         backgroundColor:
             Colors.white,
 
-        elevation: 0,
+        elevation:
+            0,
 
         foregroundColor:
             navy,
 
-        title: const Text(
+        title:
+            const Text(
           'Emergency SOS',
-          style: TextStyle(
+          style:
+              TextStyle(
             fontWeight:
                 FontWeight.w800,
           ),
         ),
       ),
 
-      body: _isLoadingProfile
-          ? const Center(
-              child:
-                  CircularProgressIndicator(),
-            )
-          : SafeArea(
-              child:
-                  SingleChildScrollView(
-                padding:
-                    const EdgeInsets
-                        .fromLTRB(
-                  20,
-                  14,
-                  20,
-                  30,
-                ),
-
-                child: Column(
-                  children: [
-                    // ==================================================
-                    // EMERGENCY HEADER
-                    // ==================================================
-
-                    Container(
-                      width:
-                          double.infinity,
-
-                      padding:
-                          const EdgeInsets
-                              .symmetric(
-                        horizontal: 16,
-                        vertical: 13,
-                      ),
-
-                      decoration:
-                          BoxDecoration(
-                        color:
-                            const Color(
-                          0xFFFFEEEE,
-                        ),
-                        borderRadius:
-                            BorderRadius
-                                .circular(
-                          16,
-                        ),
-                        border:
-                            Border.all(
-                          color:
-                              const Color(
-                            0xFFFFD1D1,
-                          ),
-                        ),
-                      ),
-
-                      child:
-                          const Row(
-                        children: [
-                          Icon(
-                            Icons
-                                .warning_rounded,
-                            color:
-                                red,
-                            size: 30,
-                          ),
-
-                          SizedBox(
-                            width: 12,
-                          ),
-
-                          Expanded(
-                            child:
-                                Column(
-                              crossAxisAlignment:
-                                  CrossAxisAlignment
-                                      .start,
-                              children: [
-                                Text(
-                                  'Emergency Assistance',
-                                  style:
-                                      TextStyle(
-                                    color:
-                                        navy,
-                                    fontSize:
-                                        17,
-                                    fontWeight:
-                                        FontWeight
-                                            .w900,
-                                  ),
-                                ),
-
-                                SizedBox(
-                                  height: 2,
-                                ),
-
-                                Text(
-                                  'Provide details for appropriate response.',
-                                  style:
-                                      TextStyle(
-                                    color:
-                                        Color(
-                                      0xFF64748B,
-                                    ),
-                                    fontSize:
-                                        12,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
+      body:
+          _isLoadingProfile
+              ? const Center(
+                  child:
+                      CircularProgressIndicator(),
+                )
+              : SafeArea(
+                  child:
+                      SingleChildScrollView(
+                    padding:
+                        const EdgeInsets
+                            .fromLTRB(
+                      20,
+                      14,
+                      20,
+                      30,
                     ),
 
-                    const SizedBox(
-                      height: 16,
-                    ),
+                    child:
+                        Column(
+                      children: [
+                        // ==================================================
+                        // EMERGENCY HEADER
+                        // ==================================================
 
-                    // ==================================================
-                    // FORM
-                    // ==================================================
+                        Container(
+                          width:
+                              double.infinity,
 
-                    Container(
-                      width:
-                          double.infinity,
-
-                      padding:
-                          const EdgeInsets
-                              .all(20),
-
-                      decoration:
-                          BoxDecoration(
-                        color:
-                            Colors.white,
-
-                        borderRadius:
-                            BorderRadius
-                                .circular(
-                          22,
-                        ),
-
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors
-                                .black
-                                .withValues(
-                              alpha:
-                                  0.05,
-                            ),
-                            blurRadius:
+                          padding:
+                              const EdgeInsets
+                                  .symmetric(
+                            horizontal:
                                 16,
-                            offset:
-                                const Offset(
-                              0,
-                              6,
-                            ),
-                          ),
-                        ],
-                      ),
-
-                      child:
-                          Column(
-                        crossAxisAlignment:
-                            CrossAxisAlignment
-                                .start,
-
-                        children: [
-                          // ==================================================
-                          // EMERGENCY TYPE
-                          // ==================================================
-
-                          _buildLabel(
-                            'Emergency Type',
+                            vertical:
+                                13,
                           ),
 
-                          const SizedBox(
-                            height: 8,
-                          ),
-
-                          DropdownButtonFormField<
-                              String>(
-                            initialValue:
-                                _emergencyType,
-
-                            decoration:
-                                _inputDecoration(
-                              hint:
-                                  'Select emergency type',
-                              icon: Icons
-                                  .emergency_outlined,
+                          decoration:
+                              BoxDecoration(
+                            color:
+                                const Color(
+                              0xFFFFEEEE,
                             ),
 
-                            items:
-                                _emergencyTypes
-                                    .map(
-                              (type) {
-                                return DropdownMenuItem<
-                                    String>(
-                                  value:
-                                      type,
-                                  child:
-                                      Text(
-                                    type,
-                                  ),
-                                );
-                              },
-                            ).toList(),
-
-                            onChanged:
-                                (value) {
-                              if (value !=
-                                  null) {
-                                setState(
-                                  () {
-                                    _emergencyType =
-                                        value;
-                                  },
-                                );
-                              }
-                            },
-                          ),
-
-                          const SizedBox(
-                            height: 20,
-                          ),
-
-                          // ==================================================
-                          // DESCRIPTION
-                          // ==================================================
-
-                          _buildLabel(
-                            'Emergency Description',
-                          ),
-
-                          const SizedBox(
-                            height: 8,
-                          ),
-
-                          TextField(
-                            controller:
-                                _descriptionController,
-
-                            maxLines: 5,
-
-                            decoration:
-                                _inputDecoration(
-                              hint:
-                                  'Describe what is happening...',
-                              icon: Icons
-                                  .description_outlined,
-                            ),
-                          ),
-
-                          const SizedBox(
-                            height: 20,
-                          ),
-
-                          // ==================================================
-                          // WHO IS AFFECTED
-                          // ==================================================
-
-                          _buildLabel(
-                            'Who is affected?',
-                          ),
-
-                          const SizedBox(
-                            height: 8,
-                          ),
-
-                          DropdownButtonFormField<
-                              String>(
-                            initialValue:
-                                _affectedPersonType,
-
-                            decoration:
-                                _inputDecoration(
-                              hint:
-                                  'Select who is affected',
-                              icon: Icons
-                                  .people_alt_outlined,
-                            ),
-
-                            items:
-                                _affectedPersonTypes
-                                    .map(
-                              (type) {
-                                return DropdownMenuItem<
-                                    String>(
-                                  value:
-                                      type,
-                                  child:
-                                      Text(
-                                    type,
-                                  ),
-                                );
-                              },
-                            ).toList(),
-
-                            onChanged:
-                                (value) {
-                              if (value !=
-                                  null) {
-                                setState(
-                                  () {
-                                    _affectedPersonType =
-                                        value;
-
-                                    _selectedFamilyMemberIndex =
-                                        null;
-                                  },
-                                );
-                              }
-                            },
-                          ),
-
-                          // FAMILY MEMBER
-                          _buildFamilyMemberSelector(),
-
-                          const SizedBox(
-                            height: 20,
-                          ),
-
-                          // ==================================================
-                          // OPTIONAL PHOTO
-                          // ==================================================
-
-                          _buildPhotoSection(),
-
-                          const SizedBox(
-                            height: 20,
-                          ),
-
-                          // ==================================================
-                          // LOCATION
-                          // ==================================================
-
-                          _buildLabel(
-                            'Current Location',
-                          ),
-
-                          const SizedBox(
-                            height: 8,
-                          ),
-
-                          Container(
-                            width:
-                                double.infinity,
-
-                            padding:
-                                const EdgeInsets
-                                    .all(
+                            borderRadius:
+                                BorderRadius
+                                    .circular(
                               16,
                             ),
 
-                            decoration:
-                                BoxDecoration(
+                            border:
+                                Border.all(
                               color:
                                   const Color(
-                                0xFFF5F7FA,
-                              ),
-
-                              borderRadius:
-                                  BorderRadius
-                                      .circular(
-                                14,
+                                0xFFFFD1D1,
                               ),
                             ),
+                          ),
 
-                            child: Row(
-                              children: [
-                                const Icon(
-                                  Icons
-                                      .location_on_rounded,
-                                  color:
-                                      teal,
-                                ),
+                          child:
+                              const Row(
+                            children: [
+                              Icon(
+                                Icons
+                                    .warning_rounded,
+                                color:
+                                    red,
+                                size:
+                                    30,
+                              ),
 
-                                const SizedBox(
-                                  width: 12,
-                                ),
+                              SizedBox(
+                                width:
+                                    12,
+                              ),
 
-                                Expanded(
-                                  child:
-                                      Text(
-                                    _latitude ==
-                                                null ||
-                                            _longitude ==
-                                                null
-                                        ? 'Location not captured'
-                                        : 'Location captured\n'
-                                            'Lat: ${_latitude!.toStringAsFixed(6)}\n'
-                                            'Lng: ${_longitude!.toStringAsFixed(6)}',
-                                    style:
-                                        const TextStyle(
-                                      color:
-                                          Color(
-                                        0xFF64748B,
+                              Expanded(
+                                child:
+                                    Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment
+                                          .start,
+                                  children: [
+                                    Text(
+                                      'Emergency Assistance',
+                                      style:
+                                          TextStyle(
+                                        color:
+                                            navy,
+                                        fontSize:
+                                            17,
+                                        fontWeight:
+                                            FontWeight
+                                                .w900,
                                       ),
-                                      fontSize:
-                                          13,
-                                      height:
-                                          1.4,
                                     ),
+
+                                    SizedBox(
+                                      height:
+                                          2,
+                                    ),
+
+                                    Text(
+                                      'Provide details for appropriate response.',
+                                      style:
+                                          TextStyle(
+                                        color:
+                                            Color(
+                                          0xFF64748B,
+                                        ),
+                                        fontSize:
+                                            12,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        const SizedBox(
+                          height:
+                              16,
+                        ),
+
+                        // ==================================================
+                        // FORM
+                        // ==================================================
+
+                        Container(
+                          width:
+                              double.infinity,
+
+                          padding:
+                              const EdgeInsets
+                                  .all(
+                            20,
+                          ),
+
+                          decoration:
+                              BoxDecoration(
+                            color:
+                                Colors.white,
+
+                            borderRadius:
+                                BorderRadius
+                                    .circular(
+                              22,
+                            ),
+
+                            boxShadow: [
+                              BoxShadow(
+                                color:
+                                    Colors
+                                        .black
+                                        .withValues(
+                                  alpha:
+                                      0.05,
+                                ),
+                                blurRadius:
+                                    16,
+                                offset:
+                                    const Offset(
+                                  0,
+                                  6,
+                                ),
+                              ),
+                            ],
+                          ),
+
+                          child:
+                              Column(
+                            crossAxisAlignment:
+                                CrossAxisAlignment
+                                    .start,
+
+                            children: [
+                              // ==================================================
+                              // EMERGENCY TYPE
+                              // ==================================================
+
+                              _buildLabel(
+                                'Emergency Type',
+                              ),
+
+                              const SizedBox(
+                                height:
+                                    8,
+                              ),
+
+                              DropdownButtonFormField<
+                                  String>(
+                                initialValue:
+                                    _emergencyType,
+
+                                decoration:
+                                    _inputDecoration(
+                                  hint:
+                                      'Select emergency type',
+                                  icon:
+                                      Icons
+                                          .emergency_outlined,
+                                ),
+
+                                items:
+                                    _emergencyTypes
+                                        .map(
+                                  (type) {
+                                    return DropdownMenuItem<
+                                        String>(
+                                      value:
+                                          type,
+                                      child:
+                                          Text(
+                                        type,
+                                      ),
+                                    );
+                                  },
+                                ).toList(),
+
+                                onChanged:
+                                    (value) {
+                                  if (value !=
+                                      null) {
+                                    setState(
+                                      () {
+                                        _emergencyType =
+                                            value;
+                                      },
+                                    );
+                                  }
+                                },
+                              ),
+
+                              const SizedBox(
+                                height:
+                                    20,
+                              ),
+
+                              // ==================================================
+                              // DESCRIPTION
+                              // ==================================================
+
+                              _buildLabel(
+                                'Emergency Description',
+                              ),
+
+                              const SizedBox(
+                                height:
+                                    8,
+                              ),
+
+                              TextField(
+                                controller:
+                                    _descriptionController,
+
+                                maxLines:
+                                    5,
+
+                                decoration:
+                                    _inputDecoration(
+                                  hint:
+                                      'Describe what is happening...',
+                                  icon:
+                                      Icons
+                                          .description_outlined,
+                                ),
+                              ),
+
+                              const SizedBox(
+                                height:
+                                    20,
+                              ),
+
+                              // ==================================================
+                              // WHO IS AFFECTED
+                              // ==================================================
+
+                              _buildLabel(
+                                'Who is affected?',
+                              ),
+
+                              const SizedBox(
+                                height:
+                                    8,
+                              ),
+
+                              DropdownButtonFormField<
+                                  String>(
+                                initialValue:
+                                    _affectedPersonType,
+
+                                decoration:
+                                    _inputDecoration(
+                                  hint:
+                                      'Select who is affected',
+                                  icon:
+                                      Icons
+                                          .people_alt_outlined,
+                                ),
+
+                                items:
+                                    _affectedPersonTypes
+                                        .map(
+                                  (type) {
+                                    return DropdownMenuItem<
+                                        String>(
+                                      value:
+                                          type,
+                                      child:
+                                          Text(
+                                        type,
+                                      ),
+                                    );
+                                  },
+                                ).toList(),
+
+                                onChanged:
+                                    (value) {
+                                  if (value !=
+                                      null) {
+                                    setState(
+                                      () {
+                                        _affectedPersonType =
+                                            value;
+
+                                        _selectedFamilyMemberIndex =
+                                            null;
+                                      },
+                                    );
+                                  }
+                                },
+                              ),
+
+                              // FAMILY MEMBER
+                              _buildFamilyMemberSelector(),
+
+                              const SizedBox(
+                                height:
+                                    20,
+                              ),
+
+                              // ==================================================
+                              // OPTIONAL PHOTO
+                              // ==================================================
+
+                              _buildPhotoSection(),
+
+                              const SizedBox(
+                                height:
+                                    20,
+                              ),
+
+                              // ==================================================
+                              // LOCATION
+                              // ==================================================
+
+                              _buildLabel(
+                                'Current Location',
+                              ),
+
+                              const SizedBox(
+                                height:
+                                    8,
+                              ),
+
+                              Container(
+                                width:
+                                    double.infinity,
+
+                                padding:
+                                    const EdgeInsets
+                                        .all(
+                                  16,
+                                ),
+
+                                decoration:
+                                    BoxDecoration(
+                                  color:
+                                      const Color(
+                                    0xFFF5F7FA,
+                                  ),
+
+                                  borderRadius:
+                                      BorderRadius
+                                          .circular(
+                                    14,
                                   ),
                                 ),
 
-                                const SizedBox(
-                                  width: 8,
+                                child:
+                                    Row(
+                                  children: [
+                                    const Icon(
+                                      Icons
+                                          .location_on_rounded,
+                                      color:
+                                          teal,
+                                    ),
+
+                                    const SizedBox(
+                                      width:
+                                          12,
+                                    ),
+
+                                    Expanded(
+                                      child:
+                                          Text(
+                                        _latitude ==
+                                                    null ||
+                                                _longitude ==
+                                                    null
+                                            ? 'Location not captured'
+                                            : 'Location captured\n'
+                                                'Lat: ${_latitude!.toStringAsFixed(6)}\n'
+                                                'Lng: ${_longitude!.toStringAsFixed(6)}',
+                                        style:
+                                            const TextStyle(
+                                          color:
+                                              Color(
+                                            0xFF64748B,
+                                          ),
+                                          fontSize:
+                                              13,
+                                          height:
+                                              1.4,
+                                        ),
+                                      ),
+                                    ),
+
+                                    const SizedBox(
+                                      width:
+                                          8,
+                                    ),
+
+                                    TextButton(
+                                      onPressed:
+                                          _isGettingLocation
+                                              ? null
+                                              : _getCurrentLocation,
+
+                                      child:
+                                          _isGettingLocation
+                                              ? const SizedBox(
+                                                  width:
+                                                      18,
+                                                  height:
+                                                      18,
+                                                  child:
+                                                      CircularProgressIndicator(
+                                                    strokeWidth:
+                                                        2,
+                                                  ),
+                                                )
+                                              : const Text(
+                                                  'GET LOCATION',
+                                                  style:
+                                                      TextStyle(
+                                                    fontWeight:
+                                                        FontWeight
+                                                            .w800,
+                                                  ),
+                                                ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+
+                              const SizedBox(
+                                height:
+                                    20,
+                              ),
+
+                              // ==================================================
+                              // SEVERITY
+                              // ==================================================
+
+                              _buildLabel(
+                                'Severity',
+                              ),
+
+                              const SizedBox(
+                                height:
+                                    8,
+                              ),
+
+                              DropdownButtonFormField<
+                                  String>(
+                                initialValue:
+                                    _severity,
+
+                                decoration:
+                                    _inputDecoration(
+                                  hint:
+                                      'Select severity',
+                                  icon:
+                                      Icons
+                                          .priority_high_rounded,
                                 ),
 
-                                TextButton(
-                                  onPressed:
-                                      _isGettingLocation
-                                          ? null
-                                          : _getCurrentLocation,
+                                items:
+                                    _severityLevels
+                                        .map(
+                                  (level) {
+                                    return DropdownMenuItem<
+                                        String>(
+                                      value:
+                                          level,
+                                      child:
+                                          Text(
+                                        level,
+                                      ),
+                                    );
+                                  },
+                                ).toList(),
 
-                                  child:
-                                      _isGettingLocation
+                                onChanged:
+                                    (value) {
+                                  if (value !=
+                                      null) {
+                                    setState(
+                                      () {
+                                        _severity =
+                                            value;
+                                      },
+                                    );
+                                  }
+                                },
+                              ),
+
+                              const SizedBox(
+                                height:
+                                    28,
+                              ),
+
+                              // ==================================================
+                              // SEND SOS
+                              // ==================================================
+
+                              SizedBox(
+                                width:
+                                    double.infinity,
+
+                                height:
+                                    56,
+
+                                child:
+                                    ElevatedButton
+                                        .icon(
+                                  onPressed:
+                                      _isSending
+                                          ? null
+                                          : _sendSos,
+
+                                  style:
+                                      ElevatedButton
+                                          .styleFrom(
+                                    backgroundColor:
+                                        red,
+
+                                    foregroundColor:
+                                        Colors
+                                            .white,
+
+                                    disabledBackgroundColor:
+                                        Colors
+                                            .grey,
+
+                                    elevation:
+                                        0,
+
+                                    shape:
+                                        RoundedRectangleBorder(
+                                      borderRadius:
+                                          BorderRadius
+                                              .circular(
+                                        16,
+                                      ),
+                                    ),
+                                  ),
+
+                                  icon:
+                                      _isSending
                                           ? const SizedBox(
                                               width:
-                                                  18,
+                                                  20,
                                               height:
-                                                  18,
+                                                  20,
                                               child:
                                                   CircularProgressIndicator(
                                                 strokeWidth:
                                                     2,
+                                                color:
+                                                    Colors.white,
                                               ),
                                             )
-                                          : const Text(
-                                              'GET LOCATION',
-                                              style:
-                                                  TextStyle(
-                                                fontWeight:
-                                                    FontWeight
-                                                        .w800,
-                                              ),
+                                          : const Icon(
+                                              Icons
+                                                  .notifications_active_rounded,
                                             ),
-                                ),
-                              ],
-                            ),
-                          ),
 
-                          const SizedBox(
-                            height: 20,
-                          ),
-
-                          // ==================================================
-                          // SEVERITY
-                          // ==================================================
-
-                          _buildLabel(
-                            'Severity',
-                          ),
-
-                          const SizedBox(
-                            height: 8,
-                          ),
-
-                          DropdownButtonFormField<
-                              String>(
-                            initialValue:
-                                _severity,
-
-                            decoration:
-                                _inputDecoration(
-                              hint:
-                                  'Select severity',
-                              icon: Icons
-                                  .priority_high_rounded,
-                            ),
-
-                            items:
-                                _severityLevels
-                                    .map(
-                              (level) {
-                                return DropdownMenuItem<
-                                    String>(
-                                  value:
-                                      level,
-                                  child:
+                                  label:
                                       Text(
-                                    level,
-                                  ),
-                                );
-                              },
-                            ).toList(),
+                                    _isSending
+                                        ? 'SENDING SOS...'
+                                        : 'SEND EMERGENCY SOS',
 
-                            onChanged:
-                                (value) {
-                              if (value !=
-                                  null) {
-                                setState(
-                                  () {
-                                    _severity =
-                                        value;
-                                  },
-                                );
-                              }
-                            },
-                          ),
-
-                          const SizedBox(
-                            height: 28,
-                          ),
-
-                          // ==================================================
-                          // SEND SOS
-                          // ==================================================
-
-                          SizedBox(
-                            width:
-                                double.infinity,
-
-                            height: 56,
-
-                            child:
-                                ElevatedButton
-                                    .icon(
-                              onPressed:
-                                  _isSending
-                                      ? null
-                                      : _sendSos,
-
-                              style:
-                                  ElevatedButton
-                                      .styleFrom(
-                                backgroundColor:
-                                    red,
-
-                                foregroundColor:
-                                    Colors.white,
-
-                                disabledBackgroundColor:
-                                    Colors
-                                        .grey,
-
-                                elevation: 0,
-
-                                shape:
-                                    RoundedRectangleBorder(
-                                  borderRadius:
-                                      BorderRadius
-                                          .circular(
-                                    16,
-                                  ),
-                                ),
-                              ),
-
-                              icon: _isSending
-                                  ? const SizedBox(
-                                      width:
-                                          20,
-                                      height:
-                                          20,
-                                      child:
-                                          CircularProgressIndicator(
-                                        strokeWidth:
-                                            2,
-                                        color:
-                                            Colors.white,
-                                      ),
-                                    )
-                                  : const Icon(
-                                      Icons
-                                          .notifications_active_rounded,
+                                    style:
+                                        const TextStyle(
+                                      fontSize:
+                                          15,
+                                      fontWeight:
+                                          FontWeight
+                                              .w900,
                                     ),
-
-                              label:
-                                  Text(
-                                _isSending
-                                    ? 'SENDING SOS...'
-                                    : 'SEND EMERGENCY SOS',
-
-                                style:
-                                    const TextStyle(
-                                  fontSize:
-                                      15,
-                                  fontWeight:
-                                      FontWeight
-                                          .w900,
+                                  ),
                                 ),
                               ),
-                            ),
+                              const SizedBox(height: 12),
+                              SizedBox(
+                                width: double.infinity,
+                                height: 52,
+                                child: OutlinedButton.icon(
+                                  onPressed: _showSmsFallback,
+                                  icon: const Icon(Icons.sms_outlined),
+                                  label: const Text(
+                                    'SMS EMERGENCY FALLBACK',
+                                    style: TextStyle(fontWeight: FontWeight.w900),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
-              ),
-            ),
     );
   }
 }

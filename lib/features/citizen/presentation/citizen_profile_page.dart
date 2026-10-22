@@ -1,6 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:resqnet/core/widgets/location_picker.dart';
 
 class CitizenProfilePage extends StatefulWidget {
   const CitizenProfilePage({super.key});
@@ -25,6 +28,9 @@ class _CitizenProfilePageState extends State<CitizenProfilePage> {
 
   bool _isLoading = true;
   bool _isSaving = false;
+  bool _isGettingLocation = false;
+  double? _latitude;
+  double? _longitude;
 
   String _pregnancyStatus = 'Not Applicable';
 
@@ -91,6 +97,10 @@ class _CitizenProfilePageState extends State<CitizenProfilePage> {
             data['healthCondition'] ?? '';
         _addressController.text =
             data['address'] ?? '';
+        _latitude = (data['latitude'] as num?)?.toDouble() ??
+            (data['profileLatitude'] as num?)?.toDouble();
+        _longitude = (data['longitude'] as num?)?.toDouble() ??
+            (data['profileLongitude'] as num?)?.toDouble();
         _districtController.text =
             data['district'] ?? '';
         _stateController.text =
@@ -182,6 +192,55 @@ class _CitizenProfilePageState extends State<CitizenProfilePage> {
     });
   }
 
+  Future<void> _getCurrentLocation() async {
+    if (_isGettingLocation) return;
+    setState(() => _isGettingLocation = true);
+    try {
+      if (!await Geolocator.isLocationServiceEnabled()) {
+        _showMessage('Please enable location services.');
+        return;
+      }
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        _showMessage('Location permission is required.');
+        return;
+      }
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+        ),
+      );
+      if (!mounted) return;
+      setState(() {
+        _latitude = position.latitude;
+        _longitude = position.longitude;
+      });
+      _showMessage('Current location captured. Save your profile to store it.');
+    } catch (_) {
+      if (mounted) _showMessage('Unable to get current location.');
+    } finally {
+      if (mounted) setState(() => _isGettingLocation = false);
+    }
+  }
+
+  Future<void> _pickAddressOnMap() async {
+    final location = await showLocationPicker(
+      context,
+      latitude: _latitude,
+      longitude: _longitude,
+    );
+    if (location == null || !mounted) return;
+    setState(() {
+      _latitude = location.latitude;
+      _longitude = location.longitude;
+    });
+    _showMessage('Address pin selected. Save your profile to store it.');
+  }
+
   // ============================================================
   // SAVE PROFILE
   // ============================================================
@@ -221,6 +280,8 @@ class _CitizenProfilePageState extends State<CitizenProfilePage> {
     });
 
     try {
+      final profileRef = _firestore.collection('users').doc(user.uid);
+      final existingProfile = await profileRef.get();
       final familyMembers = _familyMembers.map((member) {
         return {
           'name': member.nameController.text.trim(),
@@ -237,11 +298,7 @@ class _CitizenProfilePageState extends State<CitizenProfilePage> {
         };
       }).toList();
 
-      await _firestore
-          .collection('users')
-          .doc(user.uid)
-          .set(
-        {
+      final profileData = <String, dynamic>{
           'name': _nameController.text.trim(),
           'email': user.email ?? '',
           'phone': _phoneController.text.trim(),
@@ -253,6 +310,10 @@ class _CitizenProfilePageState extends State<CitizenProfilePage> {
           'pregnancyStatus': _pregnancyStatus,
 
           'address': _addressController.text.trim(),
+          'latitude': _latitude,
+          'longitude': _longitude,
+          'profileLatitude': _latitude,
+          'profileLongitude': _longitude,
           'district': _districtController.text.trim(),
           'state': _stateController.text.trim(),
           'emergencyContact':
@@ -262,21 +323,23 @@ class _CitizenProfilePageState extends State<CitizenProfilePage> {
           'familyMembers': familyMembers,
 
           'updatedAt': FieldValue.serverTimestamp(),
-        },
-        SetOptions(merge: true),
-      );
+        };
+
+      if (!existingProfile.exists) {
+        profileData['role'] = 'citizen';
+        profileData['createdAt'] = FieldValue.serverTimestamp();
+      }
+
+      await profileRef.set(profileData, SetOptions(merge: true));
 
       if (!mounted) return;
 
       _showMessage(
         'Profile updated successfully.',
       );
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
-
-      _showMessage(
-        'Unable to save profile. Please try again.',
-      );
+      _showMessage('Unable to save profile: $e');
     } finally {
       if (mounted) {
         setState(() {
@@ -757,6 +820,72 @@ class _CitizenProfilePageState extends State<CitizenProfilePage> {
                                   'Enter your address',
                               icon:
                                   Icons.home_outlined,
+                            ),
+                          ),
+
+                          const SizedBox(height: 10),
+
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF0FDFA),
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(color: const Color(0xFFBFE7E3)),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Icon(Icons.location_on_outlined, color: Color(0xFF087F8C)),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        _latitude != null && _longitude != null
+                                            ? 'Lat: ${_latitude!.toStringAsFixed(6)}  Lng: ${_longitude!.toStringAsFixed(6)}'
+                                            : 'Address location not selected',
+                                        style: const TextStyle(
+                                          color: Color(0xFF102A43),
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 10),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: OutlinedButton.icon(
+                                        onPressed: _isGettingLocation ? null : _getCurrentLocation,
+                                        icon: _isGettingLocation
+                                            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                                            : const Icon(Icons.my_location_rounded, size: 18),
+                                        label: const Text('Get Location'),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: ElevatedButton.icon(
+                                        onPressed: _pickAddressOnMap,
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: const Color(0xFF087F8C),
+                                          foregroundColor: Colors.white,
+                                        ),
+                                        icon: const Icon(Icons.map_outlined, size: 18),
+                                        label: const Text('Pin on Map'),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 5),
+                                const Text(
+                                  'Choose your home/address location, then save your profile.',
+                                  style: TextStyle(color: Color(0xFF64748B), fontSize: 11),
+                                ),
+                              ],
                             ),
                           ),
 

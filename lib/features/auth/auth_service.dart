@@ -1,3 +1,4 @@
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
@@ -5,77 +6,77 @@ import 'package:google_sign_in/google_sign_in.dart';
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-
   final GoogleSignIn _googleSignIn = GoogleSignIn.instance;
 
-  // Current logged-in user
   User? get currentUser => _auth.currentUser;
-
-  // Listen for login/logout changes
   Stream<User?> get authStateChanges => _auth.authStateChanges();
 
-  // Email + Password Registration
   Future<UserCredential> registerWithEmail({
     required String name,
     required String email,
     required String phone,
     required String password,
+    String role = 'citizen',
+    String organization = '',
+    String organizationDetails = '',
+    String verificationIdType = '',
   }) async {
-    // Create Firebase Authentication account
-    final UserCredential credential =
-        await _auth.createUserWithEmailAndPassword(
+    if (role != 'citizen' && role != 'volunteer') {
+      throw Exception('Invalid account type.');
+    }
+
+    final credential = await _auth.createUserWithEmailAndPassword(
       email: email,
       password: password,
     );
 
-    final User? user = credential.user;
+    final user = credential.user;
+    if (user == null) throw Exception('Account creation failed.');
 
-    if (user == null) {
-      throw Exception('User account could not be created.');
+    try {
+      await _firestore.collection('users').doc(user.uid).set({
+        'name': name,
+        'email': email,
+        'phone': phone,
+        'role': role,
+        'status': 'active',
+        'organization': role == 'volunteer' ? organization : '',
+        'organizationDetails':
+            role == 'volunteer' ? organizationDetails : '',
+        'verificationIdType':
+            role == 'volunteer' ? verificationIdType : '',
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      return credential;
+    } catch (_) {
+      await user.delete();
+      rethrow;
     }
-
-    // Create the user's profile in Firestore
-    await _firestore.collection('users').doc(user.uid).set({
-      'name': name,
-      'email': email,
-      'phone': phone,
-      'role': 'citizen',
-      'status': 'active',
-      'createdAt': FieldValue.serverTimestamp(),
-    });
-
-    return credential;
   }
 
-  // Email + Password Login
   Future<UserCredential> loginWithEmail({
     required String email,
     required String password,
   }) async {
-    return await _auth.signInWithEmailAndPassword(
+    return _auth.signInWithEmailAndPassword(
       email: email,
       password: password,
     );
   }
 
-  // Google Login
   Future<UserCredential?> signInWithGoogle() async {
     await _googleSignIn.initialize();
-
-    final GoogleSignInAccount googleUser =
-        await _googleSignIn.authenticate();
-
-    final GoogleSignInAuthentication googleAuth =
-        googleUser.authentication;
+    final googleUser = await _googleSignIn.authenticate();
+    final googleAuth = googleUser.authentication;
 
     final credential = GoogleAuthProvider.credential(
       idToken: googleAuth.idToken,
     );
 
-    return await _auth.signInWithCredential(credential);
+    return _auth.signInWithCredential(credential);
   }
 
-  // Logout
   Future<void> signOut() async {
     await _googleSignIn.signOut();
     await _auth.signOut();
