@@ -14,25 +14,39 @@ class OfficialAlertsSection extends StatelessWidget {
           .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
-          return const Center(child: Text('Unable to load official alerts.'));
+          return const Center(
+            child: Text('Unable to load official alerts.'),
+          );
         }
 
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
 
-        final alerts = snapshot.data?.docs ?? [];
-
-        if (alerts.isEmpty) {
-          return const Center(child: Text('No official alerts at present.'));
-        }
+        final alerts = snapshot.data?.docs.toList() ?? [];
 
         alerts.sort((a, b) {
-          final aTime = a.data()['createdAt'] as Timestamp?;
-          final bTime = b.data()['createdAt'] as Timestamp?;
-          return (bTime?.millisecondsSinceEpoch ?? 0)
-              .compareTo(aTime?.millisecondsSinceEpoch ?? 0);
+          final aTime = a.data()['createdAt'];
+          final bTime = b.data()['createdAt'];
+
+          final aDate = aTime is Timestamp
+              ? aTime.millisecondsSinceEpoch
+              : 0;
+          final bDate = bTime is Timestamp
+              ? bTime.millisecondsSinceEpoch
+              : 0;
+
+          return bDate.compareTo(aDate);
         });
+
+        if (alerts.isEmpty) {
+          return const Center(
+            child: Padding(
+              padding: EdgeInsets.all(20),
+              child: Text('No official alerts at present.'),
+            ),
+          );
+        }
 
         return ListView.builder(
           shrinkWrap: true,
@@ -40,8 +54,8 @@ class OfficialAlertsSection extends StatelessWidget {
           itemCount: alerts.length,
           itemBuilder: (context, index) {
             final alert = alerts[index].data();
-            final severity = (alert['severity'] ?? 'Information').toString();
-
+            final severity =
+                (alert['severity'] ?? 'Information').toString();
             final color = severity == 'Critical'
                 ? Colors.red
                 : severity == 'High'
@@ -53,7 +67,11 @@ class OfficialAlertsSection extends StatelessWidget {
             return Card(
               margin: const EdgeInsets.symmetric(vertical: 6),
               child: ListTile(
-                leading: Icon(Icons.campaign, color: color, size: 30),
+                leading: Icon(
+                  Icons.campaign,
+                  color: color,
+                  size: 30,
+                ),
                 title: Text(
                   (alert['title'] ?? 'Official Alert').toString(),
                   style: const TextStyle(fontWeight: FontWeight.bold),
